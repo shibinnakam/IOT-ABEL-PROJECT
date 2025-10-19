@@ -4,6 +4,8 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 const mongoose = require("mongoose");
+const { spawn } = require("child_process");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,6 +21,7 @@ const imageSchema = new mongoose.Schema({
   data: Buffer,
   contentType: String,
   createdAt: { type: Date, default: Date.now },
+  detectionResult: { type: String, default: "pending" },
 });
 const Image = mongoose.model("Image", imageSchema);
 
@@ -27,25 +30,55 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ====== Upload Route ======
-// Accept raw JPEG from ESP32-CAM
 app.post("/upload", express.raw({ type: "image/jpeg", limit: "5mb" }), async (req, res) => {
   try {
     if (!req.body || !req.body.length) {
       return res.status(400).send("No image data received");
     }
 
-    // Save image to MongoDB
-    const newImage = new Image({
-      data: req.body,
-      contentType: "image/jpeg",
-    });
-    await newImage.save();
+    // Save temporary file for YOLO detection
+    const tempPath = path.join(__dirname, "temp_image.jpg");
+    fs.writeFileSync(tempPath, req.body);
 
-    console.log(`✅ Image saved to MongoDB (${req.body.length} bytes)`);
+    // Respond immediately to ESP32
     res.status(200).send("OK");
+
+    // Spawn Python process for detection
+    const pythonPath = path.join(__dirname, "ml_model", "detect_test.py"); // updated script
+    const python = spawn("python", [pythonPath, tempPath]);
+
+    python.stdout.on("data", async (data) => {
+      const result = data.toString().trim();
+      console.log(`🐘 Detection result: ${result}`);
+
+      if (result.includes("elephant")) {
+        // Save only elephant images
+        const newImage = new Image({
+          data: req.body,
+          contentType: "image/jpeg",
+          detectionResult: result,
+        });
+        await newImage.save();
+        console.log("✅ Elephant image saved to MongoDB!");
+      } else {
+        console.log("❌ No elephant detected. Image discarded.");
+      }
+
+      // Remove temporary file
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    });
+
+    python.stderr.on("data", (data) => {
+      console.error("⚠️ Python error:", data.toString());
+    });
+
+    python.on("exit", (code) => {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      console.log(`🐍 Python process exited with code ${code}`);
+    });
+
   } catch (err) {
     console.error("❌ Upload error:", err);
-    res.status(500).send("Internal Server Error");
   }
 });
 
@@ -65,8 +98,12 @@ app.get("/latest", async (req, res) => {
 // ====== Route to Get All Images ======
 app.get("/images", async (req, res) => {
   try {
-    const images = await Image.find().sort({ createdAt: 1 }); // oldest first
-    res.json(images.map(img => ({ _id: img._id })));
+    const images = await Image.find().sort({ createdAt: 1 });
+    res.json(images.map(img => ({
+      _id: img._id,
+      detectionResult: img.detectionResult,
+      createdAt: img.createdAt,
+    })));
   } catch (err) {
     console.error("❌ Error fetching images:", err);
     res.status(500).send("Internal Server Error");
