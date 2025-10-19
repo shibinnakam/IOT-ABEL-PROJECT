@@ -1,10 +1,7 @@
 // server.js
-
 require("dotenv").config();
 const express = require("express");
-const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 const cors = require("cors");
 const mongoose = require("mongoose");
 
@@ -28,37 +25,31 @@ const Image = mongoose.model("Image", imageSchema);
 // ====== Middleware ======
 app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// ====== Multer Setup ======
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, "latest.jpg"),
-});
-const upload = multer({ storage });
 
 // ====== Upload Route ======
+// Accept raw JPEG from ESP32-CAM
 app.post("/upload", express.raw({ type: "image/jpeg", limit: "5mb" }), async (req, res) => {
   try {
-    // Save locally
-    fs.writeFileSync("uploads/latest.jpg", req.body);
+    if (!req.body || !req.body.length) {
+      return res.status(400).send("No image data received");
+    }
 
-    // Save in MongoDB
+    // Save image to MongoDB
     const newImage = new Image({
       data: req.body,
       contentType: "image/jpeg",
     });
     await newImage.save();
 
-    console.log("✅ Image saved to MongoDB and local storage");
-    res.sendStatus(200);
+    console.log(`✅ Image saved to MongoDB (${req.body.length} bytes)`);
+    res.status(200).send("OK");
   } catch (err) {
     console.error("❌ Upload error:", err);
-    res.sendStatus(500);
+    res.status(500).send("Internal Server Error");
   }
 });
 
-// ====== Route to Get Latest Image from MongoDB ======
+// ====== Route to Get Latest Image ======
 app.get("/latest", async (req, res) => {
   try {
     const latest = await Image.findOne().sort({ createdAt: -1 });
@@ -66,8 +57,8 @@ app.get("/latest", async (req, res) => {
     res.set("Content-Type", latest.contentType);
     res.send(latest.data);
   } catch (err) {
-    console.error("❌ Error fetching image:", err);
-    res.sendStatus(500);
+    console.error("❌ Error fetching latest image:", err);
+    res.status(500).send("Internal Server Error");
   }
 });
 
@@ -78,5 +69,5 @@ app.get("/", (req, res) => {
 
 // ====== Start Server ======
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
