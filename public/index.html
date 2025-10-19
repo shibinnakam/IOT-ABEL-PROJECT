@@ -9,24 +9,69 @@
       background: #0f172a;
       color: white;
       text-align: center;
-      margin-top: 50px;
+      margin-top: 30px;
     }
-    h1 { color: #38bdf8; }
-    img {
+    h1 { color: #38bdf8; margin-bottom: 20px; }
+    #latest img {
       width: 640px;
       height: 480px;
       border: 3px solid #38bdf8;
       border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    #history img {
+      width: 320px;
+      height: 240px;
+      border: 2px solid #38bdf8;
+      border-radius: 8px;
+      margin: 5px;
+    }
+    #history {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
     }
   </style>
 </head>
 <body>
   <h1>ESP32-CAM Cloud Surveillance</h1>
-  <img id="liveFeed" src="/latest" alt="Waiting for image...">
+
+  <div id="latest">
+    <h2>Latest Image</h2>
+    <img id="liveFeed" src="/latest" alt="Waiting for image...">
+  </div>
+
+  <div id="history">
+    <h2>All Stored Images</h2>
+    <!-- Images from MongoDB will appear here -->
+  </div>
+
   <script>
+    // Refresh latest image every 2 seconds
     setInterval(() => {
       document.getElementById("liveFeed").src = "/latest?t=" + new Date().getTime();
-    }, 2000); // refresh every 2 seconds
+    }, 2000);
+
+    // Load all images from MongoDB
+    async function loadHistory() {
+      try {
+        const res = await fetch("/images");
+        const images = await res.json();
+        const container = document.getElementById("history");
+        container.innerHTML = "<h2>All Stored Images</h2>"; // reset header
+        images.forEach(img => {
+          const el = document.createElement("img");
+          el.src = "/image/" + img._id;
+          container.appendChild(el);
+        });
+      } catch (err) {
+        console.error("Error loading images:", err);
+      }
+    }
+
+    // Load images on page load and every 5 seconds
+    loadHistory();
+    setInterval(loadHistory, 5000);
   </script>
 </body>
 </html>

@@ -62,6 +62,30 @@ app.get("/latest", async (req, res) => {
   }
 });
 
+// ====== Route to Get All Images ======
+app.get("/images", async (req, res) => {
+  try {
+    const images = await Image.find().sort({ createdAt: 1 }); // oldest first
+    res.json(images.map(img => ({ _id: img._id })));
+  } catch (err) {
+    console.error("❌ Error fetching images:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+// ====== Route to Serve Image by ID ======
+app.get("/image/:id", async (req, res) => {
+  try {
+    const img = await Image.findById(req.params.id);
+    if (!img) return res.status(404).send("Image not found");
+    res.set("Content-Type", img.contentType);
+    res.send(img.data);
+  } catch (err) {
+    console.error("❌ Error fetching image:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
 // ====== Serve Main Page ======
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
