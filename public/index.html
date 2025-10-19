@@ -21,11 +21,11 @@
   </style>
 </head>
 <body>
-  <h1>ESP32-CAM Live Feed</h1>
-  <img id="liveFeed" src="/uploads/latest.jpg" alt="No Image Yet">
+  <h1>ESP32-CAM Cloud Surveillance</h1>
+  <img id="liveFeed" src="/latest" alt="Waiting for image...">
   <script>
     setInterval(() => {
-      document.getElementById('liveFeed').src = '/uploads/latest.jpg?t=' + new Date().getTime();
+      document.getElementById("liveFeed").src = "/latest?t=" + new Date().getTime();
     }, 2000);
   </script>
 </body>
